@@ -49,8 +49,7 @@ nav li a {
 
 .panel {
   height: 100vh;
-  position: sticky;
-  top: 0;
+  position: relative; /* вместо sticky */
   display: flex;
   align-items: center;
   justify-content: center;
