@@ -20,16 +20,17 @@ const TransitionComponent = ({ children }) => {
     .timeline({
       paused: true,
       onComplete: () => {
-        // Ждём пока браузер пересчитает layout
-        requestAnimationFrame(() => {
+        // Ждём небольшую задержку перед установкой completed
+        setTimeout(() => {
           toggleCompleted(true);
-        });
+        }, 100); // 100ms — достаточно, чтобы браузер пересчитал layout
       },
     })
     .to(node, { autoAlpha: 1, xPercent: 0, duration: 0.25 })
     .to(node, { scale: 1, duration: 0.25 })
     .play();
 }}
+
 
       >
         {children}
