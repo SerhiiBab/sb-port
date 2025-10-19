@@ -1,65 +1,83 @@
-import React, { useContext, useRef } from 'react';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { useGSAP } from '@gsap/react';
+import React, { useContext, useEffect, useRef } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { ScrollToPlugin } from "gsap/ScrollToPlugin";
+import { useGSAP } from "@gsap/react";
 
-import TransitionContext from '../context/TransitionContext';
+import TransitionContext from "../context/TransitionContext";
+
+gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
 export default function Layers() {
   const main = useRef();
   const { completed } = useContext(TransitionContext);
   const scrollTween = useRef();
   const snapTriggers = useRef([]);
+
   const { contextSafe } = useGSAP(
     () => {
       if (!completed) return;
-      let panels = gsap.utils.toArray('.panel'),
-          scrollStarts = [0],
-          snapScroll = value => value; // for converting a pixel-based scroll value to the closest panel scroll position
-      
-      // create a ScrollTrigger for each panel that's only concerned about figuring out when its top hits the top of the viewport. We'll use the "start" of that ScrollTrigger to figure out snapping positions.
-      panels.forEach((panel, i) => {
-        snapTriggers.current[i] = ScrollTrigger.create({
-          trigger: panel,
-          start: "top top"
+
+      // Отложим запуск на один кадр после layout
+      requestAnimationFrame(() => {
+        let panels = gsap.utils.toArray(".panel");
+        if (!panels.length) return;
+
+        let scrollStarts = [0];
+        let snapScroll = (value) => value;
+
+        // Очистка старых триггеров перед пересозданием
+        ScrollTrigger.getAll().forEach((t) => t.kill());
+
+        panels.forEach((panel, i) => {
+          snapTriggers.current[i] = ScrollTrigger.create({
+            trigger: panel,
+            start: "top top",
+          });
         });
+
+        ScrollTrigger.addEventListener("refresh", () => {
+          scrollStarts = snapTriggers.current.map((trigger) => trigger.start);
+          snapScroll = ScrollTrigger.snapDirectional(scrollStarts);
+        });
+
+        ScrollTrigger.observe({
+          type: "wheel,touch",
+          onChangeY(self) {
+            if (!scrollTween.current) {
+              let scroll = snapScroll(
+                self.scrollY() + self.deltaY,
+                self.deltaY > 0 ? 1 : -1
+              );
+              goToSection(scrollStarts.indexOf(scroll));
+            }
+          },
+        });
+
+        ScrollTrigger.refresh();
       });
-
-      // once all the triggers have calculated their start/end, create the snap function that'll accept an overall progress value for the overall page, and then return the closest panel snapping spot based on the direction of scroll
-      ScrollTrigger.addEventListener("refresh", () => {
-        scrollStarts = snapTriggers.current.map(trigger => trigger.start); // build an Array with just the starting positions where each panel hits the top of the viewport
-        snapScroll = ScrollTrigger.snapDirectional(scrollStarts); // get a function that we can feed a pixel-based scroll value to and a direction, and then it'll spit back the closest snap position (in pixels)
-      });
-
-      ScrollTrigger.observe({
-        type: "wheel,touch",
-        onChangeY(self) {
-          if (!scrollTween.current) {
-            // find the closest snapping spot based on the direction of scroll
-            let scroll = snapScroll(self.scrollY() + self.deltaY, self.deltaY > 0 ? 1 : -1);
-            goToSection(scrollStarts.indexOf(scroll)); // scroll to the index of the associated panel
-          }
-        }
-      })
-
-      ScrollTrigger.refresh();
     },
-    {
-      dependencies: [completed],
-      scope: main,
-      revertOnUpdate: true,
-    }
+    { dependencies: [completed], scope: main, revertOnUpdate: true }
   );
 
   const goToSection = contextSafe((i) => {
-    console.log("scroll to", i);
+    if (i < 0 || !snapTriggers.current[i]) return;
     scrollTween.current = gsap.to(window, {
       scrollTo: { y: snapTriggers.current[i].start, autoKill: false },
       duration: 1,
+      ease: "power2.inOut",
       onComplete: () => (scrollTween.current = null),
-      overwrite: true
+      overwrite: true,
     });
   });
+
+  // 🔹 Дополнительно: после монтирования перезапусти refresh для мобильных
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      ScrollTrigger.refresh();
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, []);
 
   return (
     <main ref={main}>
