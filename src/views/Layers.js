@@ -3,7 +3,6 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ScrollToPlugin } from "gsap/ScrollToPlugin";
 import { useGSAP } from "@gsap/react";
-
 import TransitionContext from "../context/TransitionContext";
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
@@ -14,30 +13,40 @@ export default function Layers() {
   const scrollTween = useRef();
   const snapTriggers = useRef([]);
 
-  const { contextSafe } = useGSAP(
+  const goToSection = (i) => {
+    if (!snapTriggers.current[i]) return;
+    scrollTween.current = gsap.to(window, {
+      scrollTo: { y: snapTriggers.current[i].start, autoKill: false },
+      duration: 1,
+      ease: "power2.inOut",
+      onComplete: () => (scrollTween.current = null),
+      overwrite: true,
+    });
+  };
+
+  useGSAP(
     () => {
       if (!completed) return;
 
-      // Отложим запуск на один кадр после layout
-      requestAnimationFrame(() => {
+      // 👇 Очень важно: дождаться пока браузер пересчитает layout
+      setTimeout(() => {
+        ScrollTrigger.getAll().forEach((t) => t.kill());
         let panels = gsap.utils.toArray(".panel");
         if (!panels.length) return;
 
-        let scrollStarts = [0];
-        let snapScroll = (value) => value;
+        let scrollStarts = [];
+        let snapScroll = (v) => v;
 
-        // Очистка старых триггеров перед пересозданием
-        ScrollTrigger.getAll().forEach((t) => t.kill());
-
-        panels.forEach((panel, i) => {
-          snapTriggers.current[i] = ScrollTrigger.create({
+        // создаём триггеры
+        snapTriggers.current = panels.map((panel) =>
+          ScrollTrigger.create({
             trigger: panel,
             start: "top top",
-          });
-        });
+          })
+        );
 
         ScrollTrigger.addEventListener("refresh", () => {
-          scrollStarts = snapTriggers.current.map((trigger) => trigger.start);
+          scrollStarts = snapTriggers.current.map((t) => t.start);
           snapScroll = ScrollTrigger.snapDirectional(scrollStarts);
         });
 
@@ -45,7 +54,7 @@ export default function Layers() {
           type: "wheel,touch",
           onChangeY(self) {
             if (!scrollTween.current) {
-              let scroll = snapScroll(
+              const scroll = snapScroll(
                 self.scrollY() + self.deltaY,
                 self.deltaY > 0 ? 1 : -1
               );
@@ -54,29 +63,16 @@ export default function Layers() {
           },
         });
 
-        ScrollTrigger.refresh();
-      });
+        ScrollTrigger.refresh(true);
+      }, 600); // 👈 добавляем явную задержку (Safari/iOS)
     },
-    { dependencies: [completed], scope: main, revertOnUpdate: true }
+    { dependencies: [completed], scope: main }
   );
 
-  const goToSection = contextSafe((i) => {
-    if (i < 0 || !snapTriggers.current[i]) return;
-    scrollTween.current = gsap.to(window, {
-      scrollTo: { y: snapTriggers.current[i].start, autoKill: false },
-      duration: 1,
-      ease: "power2.inOut",
-      onComplete: () => (scrollTween.current = null),
-      overwrite: true,
-    });
-  });
-
-  // 🔹 Дополнительно: после монтирования перезапусти refresh для мобильных
+  // 👇 Дополнительно делаем принудительный refresh при появлении страницы
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      ScrollTrigger.refresh();
-    }, 300);
-    return () => clearTimeout(timeout);
+    const id = setTimeout(() => ScrollTrigger.refresh(true), 1000);
+    return () => clearTimeout(id);
   }, []);
 
   return (
