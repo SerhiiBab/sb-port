@@ -39,11 +39,13 @@ export default function Layers() {
 
         // создаём триггеры
         snapTriggers.current = panels.map((panel) =>
-          ScrollTrigger.create({
-            trigger: panel,
-            start: "top top",
-          })
-        );
+  ScrollTrigger.create({
+    trigger: panel,
+    start: "top top",
+    // учесть смещение header
+    scroller: window,
+  })
+);
 
         ScrollTrigger.addEventListener("refresh", () => {
           scrollStarts = snapTriggers.current.map((t) => t.start);
